@@ -244,6 +244,84 @@ def create_hypersphere_slice(phi=0.0, u_resolution=100, v_resolution=100, radius
     grid = pv.StructuredGrid(x, y, z)
     return grid.extract_surface(algorithm='dataset_surface')
 
+def generate_fractal_strip(fractal_type='mandelbrot', strip_width=16, height=1024, max_iter=256, zoom=1.0, center_x=-0.5, center_y=0.0, c_real=-0.7, c_imag=0.27015):
+    """Generate a narrow vertical strip of fractal for dynamic generation."""
+    # Adaptive iteration count based on zoom - more detail at higher zoom
+    adaptive_iter = int(max_iter * (1 + np.log10(zoom) * 0.5))
+    adaptive_iter = min(adaptive_iter, 1024)  # Cap at reasonable maximum
+    adaptive_iter = max(adaptive_iter, max_iter)  # At least the base amount
+    
+    if fractal_type == 'mandelbrot':
+        # Create coordinate arrays for just the strip
+        x = np.linspace(center_x - 2.0/zoom, center_x + 2.0/zoom, strip_width)
+        y = np.linspace(center_y - 1.0/zoom, center_y + 1.0/zoom, height)
+        X, Y = np.meshgrid(x, y)
+        C = X + 1j * Y
+        
+        # Initialize Z and iteration count
+        Z = np.zeros_like(C)
+        M = np.zeros(C.shape)
+        
+        # Mandelbrot iteration
+        for i in range(adaptive_iter):
+            mask = np.abs(Z) <= 2
+            Z[mask] = Z[mask]**2 + C[mask]
+            M[mask] = i
+        
+        # Smooth coloring
+        mask_escaped = np.abs(Z) > 2
+        M[mask_escaped] = M[mask_escaped] + 1 - np.log(np.log(np.abs(Z[mask_escaped])))/np.log(2)
+        
+    elif fractal_type == 'julia':
+        # Julia set
+        x = np.linspace(-1.5, 1.5, strip_width)
+        y = np.linspace(-1.0, 1.0, height)
+        X, Y = np.meshgrid(x, y)
+        Z = (X + 1j * Y) / zoom + (center_x + 1j * center_y)
+        C = c_real + 1j * c_imag
+        
+        M = np.zeros(Z.shape)
+        for i in range(adaptive_iter):
+            mask = np.abs(Z) <= 2
+            Z[mask] = Z[mask]**2 + C
+            M[mask] = i
+        
+        mask_escaped = np.abs(Z) > 2
+        M[mask_escaped] = M[mask_escaped] + 1 - np.log(np.log(np.abs(Z[mask_escaped])))/np.log(2)
+        
+    elif fractal_type == 'burning_ship':
+        # Burning ship
+        x = np.linspace(-2.0/zoom + center_x, 1.0/zoom + center_x, strip_width)
+        y = np.linspace(-1.5/zoom + center_y, 0.5/zoom + center_y, height)
+        X, Y = np.meshgrid(x, y)
+        C = X + 1j * Y
+        
+        Z = np.zeros_like(C)
+        M = np.zeros(C.shape)
+        
+        for i in range(adaptive_iter):
+            mask = np.abs(Z) <= 2
+            Z[mask] = (np.abs(Z[mask].real) + 1j * np.abs(Z[mask].imag))**2 + C[mask]
+            M[mask] = i
+        
+        mask_escaped = np.abs(Z) > 2
+        M[mask_escaped] = M[mask_escaped] + 1 - np.log(np.log(np.abs(Z[mask_escaped])))/np.log(2)
+    else:
+        # Default to mandelbrot
+        return generate_fractal_strip('mandelbrot', strip_width, height, max_iter, zoom, center_x, center_y)
+    
+    # Normalize with logarithmic scaling
+    M = np.log1p(M) / np.log1p(adaptive_iter)
+    
+    # Create vibrant RGB colors
+    freq = 32 if fractal_type == 'mandelbrot' else (40 if fractal_type == 'julia' else 50)
+    r = (np.sin(M * np.pi * freq) * 0.5 + 0.5) * 255
+    g = (np.sin(M * np.pi * freq + 2.094) * 0.5 + 0.5) * 255
+    b = (np.sin(M * np.pi * freq + 4.188) * 0.5 + 0.5) * 255
+    
+    strip = np.stack([r, g, b], axis=-1).astype(np.uint8)
+    return strip
+
 def create_mandelbrot_texture(width=2048, height=1024, max_iter=256, zoom=1.0, center_x=-0.5, center_y=0.0):
     """Generate a Mandelbrot set fractal texture."""
     # Create coordinate arrays
@@ -486,8 +564,13 @@ def create_spiral_texture(images, texture_height=512, num_repeats=3):
     
     return texture, total_width
 
-def animate_spiral_torus(torus, texture_image, spiral_turns=3, scroll_speed=2, rotate=False, rotation_speed=1.0, bg_colors=None, fit_mode=False, twist=0.0):
-    """Animate the spiral movement of textures on the torus."""
+def animate_spiral_torus(torus, texture_image, spiral_turns=3, scroll_speed=2, rotate=False, rotation_speed=1.0, bg_colors=None, fit_mode=False, twist=0.0, dynamic_fractal=None):
+    """Animate the spiral movement of textures on the torus.
+    
+    Parameters:
+    - dynamic_fractal: dict with fractal parameters for dynamic generation, or None for static texture
+      Example: {'type': 'mandelbrot', 'height': 1024}
+    """
     plotter = pv.Plotter()
     mode_text = "Fitted" if fit_mode else "Spiral"
     plotter.add_text(f"{mode_text} Image Torus - Press 'q' to quit", position='upper_left')
@@ -538,8 +621,93 @@ def animate_spiral_torus(torus, texture_image, spiral_turns=3, scroll_speed=2, r
     offset = [0]
     rotation_angle = [0.0]
     
+    # Dynamic fractal state
+    if dynamic_fractal:
+        fractal_state = {
+            'type': dynamic_fractal.get('type', 'mandelbrot'),
+            'height': dynamic_fractal.get('height', 1024),
+            'buffer_width': 2048,  # Circular buffer width
+            'strip_width': 32,  # Generate 32 pixels at a time for smoother rendering
+            'base_zoom': 1.0,
+            'view_width': 4.0,  # Width of fractal space to view
+            'view_height': 2.0,  # Height of fractal space to view
+            'center_x': -0.5 if dynamic_fractal.get('type') == 'mandelbrot' else 0.0,
+            'center_y': 0.0,
+            'c_real': -0.7,  # For Julia sets
+            'c_imag': 0.27015,
+            'pan_offset': 0.0,  # How far we've panned through fractal space
+            'journey_phase': 0.0,
+            'texture_array': np.zeros((dynamic_fractal.get('height', 1024), 2048, 3), dtype=np.uint8)
+        }
+        
+        # Initialize with fractal content spanning the view space
+        print("Initializing dynamic fractal buffer...")
+        for x_offset in range(0, fractal_state['buffer_width'], fractal_state['strip_width']):
+            # Calculate which slice of fractal space this strip represents
+            progress = x_offset / fractal_state['buffer_width']
+            slice_center_x = fractal_state['center_x'] - fractal_state['view_width']/2 + progress * fractal_state['view_width']
+            
+            strip = generate_fractal_strip(
+                fractal_type=fractal_state['type'],
+                strip_width=fractal_state['strip_width'],
+                height=fractal_state['height'],
+                zoom=fractal_state['base_zoom'],
+                center_x=slice_center_x,
+                center_y=fractal_state['center_y'],
+                c_real=fractal_state['c_real'],
+                c_imag=fractal_state['c_imag']
+            )
+            fractal_state['texture_array'][:, x_offset:x_offset+fractal_state['strip_width'], :] = strip
+        
+        # Update texture_array reference for animation
+        texture_array = fractal_state['texture_array']
+        texture_pv.SetInputDataObject(0, pv.Texture(texture_array).GetInputDataObject(0, 0))
+    else:
+        fractal_state = None
+    
     def update_texture(step):
-        """Scroll the texture by shifting the array."""
+        """Scroll the texture and generate new fractal if in dynamic mode."""
+        # Generate new fractal content if in dynamic mode
+        if fractal_state:
+            # Update journey parameters
+            fractal_state['journey_phase'] += 0.01
+            
+            # Pan through fractal space based on scroll
+            fractal_state['pan_offset'] += scroll_speed * 0.0005
+            
+            # Animate Julia set parameters
+            if fractal_state['type'] == 'julia':
+                fractal_state['c_real'] = -0.7 + 0.3 * np.sin(fractal_state['journey_phase'] * 0.2)
+                fractal_state['c_imag'] = 0.27015 + 0.1 * np.cos(fractal_state['journey_phase'] * 0.3)
+            
+            # Slowly drift vertically through fractal space
+            if fractal_state['type'] == 'mandelbrot':
+                fractal_state['center_y'] = np.sin(fractal_state['journey_phase'] * 0.1) * 0.5
+            
+            # Generate new strip at the leading edge of our view
+            # Calculate where in fractal space this new strip should be
+            leading_edge_pos = fractal_state['pan_offset'] + fractal_state['view_width']
+            slice_center_x = fractal_state['center_x'] - fractal_state['view_width']/2 + (leading_edge_pos % fractal_state['view_width'])
+            
+            # Generate the new strip
+            new_strip = generate_fractal_strip(
+                fractal_type=fractal_state['type'],
+                strip_width=fractal_state['strip_width'],
+                height=fractal_state['height'],
+                zoom=fractal_state['base_zoom'],
+                center_x=slice_center_x,
+                center_y=fractal_state['center_y'],
+                c_real=fractal_state['c_real'],
+                c_imag=fractal_state['c_imag']
+            )
+            
+            # Scroll texture array and insert new strip
+            fractal_state['texture_array'] = np.roll(fractal_state['texture_array'], -fractal_state['strip_width'], axis=1)
+            fractal_state['texture_array'][:, -fractal_state['strip_width']:, :] = new_strip
+            
+            # Update the texture
+            texture_pv.SetInputDataObject(0, pv.Texture(fractal_state['texture_array']).GetInputDataObject(0, 0))
+        
         if fit_mode:
             # Animate by shifting UV coordinates in fit mode
             offset[0] = (offset[0] + scroll_speed * 0.001) % 1.0
@@ -596,7 +764,7 @@ def animate_spiral_torus(torus, texture_image, spiral_turns=3, scroll_speed=2, r
     
     plotter.show()
 
-def animate_cycling_topologies(texture_image, spiral_turns=5, scroll_speed=3, rotate=False, rotation_speed=1.0, bg_colors=None, fit_mode=False, twist=0.0):
+def animate_cycling_topologies(texture_image, spiral_turns=5, scroll_speed=3, rotate=False, rotation_speed=1.0, bg_colors=None, fit_mode=False, twist=0.0, dynamic_fractal=None):
     """Animate cycling through different topologies every 5 seconds."""
     plotter = pv.Plotter()
     
@@ -643,6 +811,47 @@ def animate_cycling_topologies(texture_image, spiral_turns=5, scroll_speed=3, ro
         'frame_count': 0,
         'current_mesh': None
     }
+    
+    # Dynamic fractal state
+    if dynamic_fractal:
+        fractal_state = {
+            'type': dynamic_fractal.get('type', 'mandelbrot'),
+            'height': dynamic_fractal.get('height', 1024),
+            'buffer_width': 2048,
+            'strip_width': 32,
+            'base_zoom': 1.0,
+            'view_width': 4.0,
+            'view_height': 2.0,
+            'center_x': -0.5 if dynamic_fractal.get('type') == 'mandelbrot' else 0.0,
+            'center_y': 0.0,
+            'c_real': -0.7,
+            'c_imag': 0.27015,
+            'pan_offset': 0.0,
+            'journey_phase': 0.0,
+            'texture_array': np.zeros((dynamic_fractal.get('height', 1024), 2048, 3), dtype=np.uint8)
+        }
+        
+        # Initialize with fractal content spanning the view space
+        print("Initializing dynamic fractal buffer...")
+        for x_offset in range(0, fractal_state['buffer_width'], fractal_state['strip_width']):
+            progress = x_offset / fractal_state['buffer_width']
+            slice_center_x = fractal_state['center_x'] - fractal_state['view_width']/2 + progress * fractal_state['view_width']
+            
+            strip = generate_fractal_strip(
+                fractal_type=fractal_state['type'],
+                strip_width=fractal_state['strip_width'],
+                height=fractal_state['height'],
+                zoom=fractal_state['base_zoom'],
+                center_x=slice_center_x,
+                center_y=fractal_state['center_y'],
+                c_real=fractal_state['c_real'],
+                c_imag=fractal_state['c_imag']
+            )
+            fractal_state['texture_array'][:, x_offset:x_offset+fractal_state['strip_width'], :] = strip
+        
+        texture_array = fractal_state['texture_array']
+    else:
+        fractal_state = None
     
     def setup_mesh(mesh):
         """Set up texture coordinates for a mesh."""
@@ -699,6 +908,45 @@ def animate_cycling_topologies(texture_image, spiral_turns=5, scroll_speed=3, ro
     
     def update_animation(step):
         """Update animation: scroll texture and switch topology every 5 seconds."""
+        # Generate new fractal content if in dynamic mode
+        if fractal_state:
+            fractal_state['journey_phase'] += 0.01
+            fractal_state['pan_offset'] += scroll_speed * 0.0005
+            
+            # Animate Julia set parameters
+            if fractal_state['type'] == 'julia':
+                fractal_state['c_real'] = -0.7 + 0.3 * np.sin(fractal_state['journey_phase'] * 0.2)
+                fractal_state['c_imag'] = 0.27015 + 0.1 * np.cos(fractal_state['journey_phase'] * 0.3)
+            
+            # Drift vertically
+            if fractal_state['type'] == 'mandelbrot':
+                fractal_state['center_y'] = np.sin(fractal_state['journey_phase'] * 0.1) * 0.5
+            
+            # Generate new strip
+            leading_edge_pos = fractal_state['pan_offset'] + fractal_state['view_width']
+            slice_center_x = fractal_state['center_x'] - fractal_state['view_width']/2 + (leading_edge_pos % fractal_state['view_width'])
+            
+            new_strip = generate_fractal_strip(
+                fractal_type=fractal_state['type'],
+                strip_width=fractal_state['strip_width'],
+                height=fractal_state['height'],
+                zoom=fractal_state['base_zoom'],
+                center_x=slice_center_x,
+                center_y=fractal_state['center_y'],
+                c_real=fractal_state['c_real'],
+                c_imag=fractal_state['c_imag']
+            )
+            
+            fractal_state['texture_array'] = np.roll(fractal_state['texture_array'], -fractal_state['strip_width'], axis=1)
+            fractal_state['texture_array'][:, -fractal_state['strip_width']:, :] = new_strip
+            
+            # Update texture on current actor
+            for actor in plotter.renderer.actors.values():
+                if hasattr(actor, 'GetTexture') and actor.GetTexture() is not None:
+                    texture_pv = pv.Texture(fractal_state['texture_array'])
+                    actor.SetTexture(texture_pv)
+                    break
+        
         if fit_mode and state['current_mesh'] is not None:
             # Animate by shifting UV coordinates in fit mode
             state['offset'] = (state['offset'] + scroll_speed * 0.001) % 1.0
@@ -808,22 +1056,23 @@ def main():
     
     # Load images or create fractal
     if args.fractal:
-        print(f"Creating {args.fractal} fractal texture...")
-        fractal_image = create_fractal_texture(args.fractal, width=2048, height=1024)
-        image_files = []
+        print(f"Using dynamic {args.fractal} fractal generation...")
         
-        # Use fractal for texture
-        if args.fit:
-            texture = fractal_image
-            texture_width = texture.width
-            print(f"Fitted fractal texture size: {texture_width}x{texture.height}")
-        else:
-            texture = fractal_image
-            texture_width = texture.width
-            print(f"Fractal texture size: {texture_width}x{texture.height}")
+        # Create initial texture (will be replaced dynamically)
+        fractal_image = create_fractal_texture(args.fractal, width=2048, height=1024)
+        texture = fractal_image
+        texture_width = texture.width
+        
+        # Set up dynamic fractal parameters
+        dynamic_fractal = {
+            'type': args.fractal,
+            'height': 1024
+        }
         
         # Use fractal colors for background
         bg_colors = extract_image_colors([fractal_image], samples_per_image=20)
+        
+        print(f"Dynamic fractal enabled - will generate new content as it scrolls!")
     else:
         image_files = load_images('images')
         
@@ -842,16 +1091,18 @@ def main():
         
         # Extract colors from images for background cycling
         bg_colors = extract_image_colors(image_files, samples_per_image=10)
+        dynamic_fractal = None  # No dynamic generation for image mode
     
     print(f"Extracted {len(bg_colors)} background colors")
     
     # If no knot specified, cycle through all topologies
     if args.knot is None:
         mode_msg = "fitted" if args.fit else "spiral"
-        print(f"Starting animation with cycling topologies ({mode_msg} mode, every 5 seconds)... Press 'q' to quit")
+        fractal_msg = " with dynamic fractal" if args.fractal else ""
+        print(f"Starting animation with cycling topologies ({mode_msg} mode{fractal_msg}, every 5 seconds)... Press 'q' to quit")
         animate_cycling_topologies(texture, spiral_turns=args.spiral_turns, scroll_speed=args.scroll_speed, 
                                    rotate=args.rotate, rotation_speed=args.rotation_speed, bg_colors=bg_colors,
-                                   fit_mode=args.fit, twist=args.twist)
+                                   fit_mode=args.fit, twist=args.twist, dynamic_fractal=dynamic_fractal)
         return
     
     # Create mesh based on selected topology
@@ -900,10 +1151,11 @@ def main():
     
     # Animate
     mode_msg = "fitted" if args.fit else "spiral"
-    print(f"Starting animation ({mode_msg} mode)... Press 'q' to quit")
+    fractal_msg = " with dynamic fractal" if args.fractal else ""
+    print(f"Starting animation ({mode_msg} mode{fractal_msg})... Press 'q' to quit")
     animate_spiral_torus(mesh, texture, spiral_turns=args.spiral_turns, scroll_speed=args.scroll_speed,
                         rotate=args.rotate, rotation_speed=args.rotation_speed, bg_colors=bg_colors,
-                        fit_mode=args.fit, twist=args.twist)
+                        fit_mode=args.fit, twist=args.twist, dynamic_fractal=dynamic_fractal)
 
 if __name__ == '__main__':
     main()
