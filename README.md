@@ -1,6 +1,6 @@
 # 3D Spiral Image Torus/Knot Visualization
 
-![Fractal Knot Animation](https://github.com/chrismrutherford/torus_spiral/blob/master/fractalKnot480.gif)
+![Fractal Knot Animation](https://github.com/chrismrutherford/fractalKnot/blob/master/fractalKnot480.gif)
 
 A Python visualization tool that maps images or fractals onto various 3D topological surfaces (torus, knots, Klein bottle, Möbius strip, etc.) with animated scrolling effects.
 
@@ -37,7 +37,7 @@ Required packages:
 Place images in the `images/` folder and run:
 
 ```bash
-python torus_spiral.py
+python fractalKnot.py
 ```
 
 This will cycle through all available topologies every 5 seconds with your images.
@@ -49,19 +49,19 @@ This will cycle through all available topologies every 5 seconds with your image
 Generate a Mandelbrot fractal on a trefoil knot:
 
 ```bash
-python torus_spiral.py --knot trefoil --fractal mandelbrot
+python fractalKnot.py --knot trefoil --fractal mandelbrot
 ```
 
 Generate a Julia set fractal with rotation:
 
 ```bash
-python torus_spiral.py --fractal julia --rotate --rotation-speed 1.5
+python fractalKnot.py --fractal julia --rotate --rotation-speed 1.5
 ```
 
 Burning Ship fractal on a Klein bottle:
 
 ```bash
-python torus_spiral.py --knot klein --fractal burning_ship --fit
+python fractalKnot.py --knot klein --fractal burning_ship --fit
 ```
 
 #### Different Topologies
@@ -69,31 +69,31 @@ python torus_spiral.py --knot klein --fractal burning_ship --fit
 Simple torus with images:
 
 ```bash
-python torus_spiral.py --knot torus
+python fractalKnot.py --knot torus
 ```
 
 Trefoil knot (3,2):
 
 ```bash
-python torus_spiral.py --knot trefoil --rotate
+python fractalKnot.py --knot trefoil --rotate
 ```
 
 Figure-8 knot (4,3):
 
 ```bash
-python torus_spiral.py --knot figure8 --spiral-turns 3
+python fractalKnot.py --knot figure8 --spiral-turns 3
 ```
 
 Cinquefoil knot (5,2):
 
 ```bash
-python torus_spiral.py --knot cinquefoil --scroll-speed 5
+python fractalKnot.py --knot cinquefoil --scroll-speed 5
 ```
 
 Pretzel knot (11,7):
 
 ```bash
-python torus_spiral.py --knot pretzel --spiral-turns 8
+python fractalKnot.py --knot pretzel --spiral-turns 8
 ```
 
 #### 4D Topologies
@@ -101,19 +101,19 @@ python torus_spiral.py --knot pretzel --spiral-turns 8
 Clifford torus (4D torus projected to 3D):
 
 ```bash
-python torus_spiral.py --knot clifford --fractal mandelbrot --fit
+python fractalKnot.py --knot clifford --fractal mandelbrot --fit
 ```
 
 4D hypersphere slice:
 
 ```bash
-python torus_spiral.py --knot hypersphere --rotate --rotation-speed 0.5
+python fractalKnot.py --knot hypersphere --rotate --rotation-speed 0.5
 ```
 
 4D torus knot with custom parameters:
 
 ```bash
-python torus_spiral.py --knot 4dknot --p 3 --q 2 --r 2 --fractal julia
+python fractalKnot.py --knot 4dknot --p 3 --q 2 --r 2 --fractal julia
 ```
 
 #### Custom Knots
@@ -121,7 +121,7 @@ python torus_spiral.py --knot 4dknot --p 3 --q 2 --r 2 --fractal julia
 Create custom torus knots with p and q parameters:
 
 ```bash
-python torus_spiral.py --knot custom --p 7 --q 5 --spiral-turns 10
+python fractalKnot.py --knot custom --p 7 --q 5 --spiral-turns 10
 ```
 
 #### Fitted Mode with Twist
@@ -129,19 +129,19 @@ python torus_spiral.py --knot custom --p 7 --q 5 --spiral-turns 10
 Natural UV mapping without spiral distortion:
 
 ```bash
-python torus_spiral.py --knot torus --fit
+python fractalKnot.py --knot torus --fit
 ```
 
 Add a Möbius-like twist (1.0 = half twist):
 
 ```bash
-python torus_spiral.py --knot torus --fit --twist 1.0
+python fractalKnot.py --knot torus --fit --twist 1.0
 ```
 
 Double twist:
 
 ```bash
-python torus_spiral.py --knot trefoil --fit --twist 2.0 --fractal mandelbrot
+python fractalKnot.py --knot trefoil --fit --twist 2.0 --fractal mandelbrot
 ```
 
 #### Animation Controls
@@ -149,13 +149,13 @@ python torus_spiral.py --knot trefoil --fit --twist 2.0 --fractal mandelbrot
 Fast scrolling with rotation:
 
 ```bash
-python torus_spiral.py --scroll-speed 10 --rotate --rotation-speed 2.0
+python fractalKnot.py --scroll-speed 10 --rotate --rotation-speed 2.0
 ```
 
 Slow, smooth animation:
 
 ```bash
-python torus_spiral.py --scroll-speed 1 --spiral-turns 3 --rotate --rotation-speed 0.3
+python fractalKnot.py --scroll-speed 1 --spiral-turns 3 --rotate --rotation-speed 0.3
 ```
 
 ## Command-Line Options
