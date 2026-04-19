@@ -1,5 +1,7 @@
 # 3D Spiral Image Torus/Knot Visualization
 
+![Fractal Knot Animation](https://github.com/chrismrutherford/torus_spiral/blob/master/fractalKnot480.gif)
+
 A Python visualization tool that maps images or fractals onto various 3D topological surfaces (torus, knots, Klein bottle, Möbius strip, etc.) with animated scrolling effects.
 
 ## Features
